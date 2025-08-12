@@ -26,7 +26,17 @@ st.markdown("""
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         color: white;
         border-radius: 10px;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .chat-container {
+        max-height: 500px;
+        overflow-y: auto;
+        padding: 1rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        background-color: #fafafa;
     }
 
     .chat-message {
@@ -34,6 +44,12 @@ st.markdown("""
         margin: 0.5rem 0;
         border-radius: 15px;
         max-width: 80%;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 
     .user-message {
@@ -44,42 +60,69 @@ st.markdown("""
     }
 
     .bot-message {
-        background-color: #f1f3f4;
+        background-color: white;
         color: #333;
         border: 1px solid #e0e0e0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .sentiment-badge {
+        padding: 0.2rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-top: 0.5rem;
     }
 
     .sentiment-positive {
         background-color: #4caf50;
         color: white;
-        padding: 0.2rem 0.5rem;
-        border-radius: 10px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        display: inline-block;
-        margin-top: 0.5rem;
     }
 
     .sentiment-negative {
         background-color: #f44336;
         color: white;
-        padding: 0.2rem 0.5rem;
-        border-radius: 10px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        display: inline-block;
-        margin-top: 0.5rem;
     }
 
-    .stAudio {
-        margin: 1rem 0;
+    .input-container {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding: 1rem 0;
+        border-top: 1px solid #e0e0e0;
+        z-index: 100;
     }
 
-    .status-message {
-        text-align: center;
-        color: #666;
-        font-style: italic;
-        padding: 0.5rem;
+    .stTextArea textarea {
+        border-radius: 20px;
+        border: 2px solid #667eea;
+        padding: 15px;
+        font-size: 16px;
+    }
+
+    .stTextArea textarea:focus {
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+
+    /* Hide streamlit header and footer */
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+
+    .stDeployButton {
+        display: none;
+    }
+
+    footer {
+        display: none;
+    }
+
+    /* Adjust main container */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 0;
+        max-width: 800px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -89,14 +132,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Hello! I'm your sentiment analysis assistant. Type a message or upload voice recording to get started. I'll analyze whether your sentiment is positive or negative! 😊",
+            "content": "Hello! I'm your sentiment analysis assistant. Type a message below and I'll analyze whether your sentiment is positive or negative! 😊",
             "timestamp": datetime.now(),
             "sentiment": None
         }
     ]
-
-if "voice_text" not in st.session_state:
-    st.session_state.voice_text = ""
 
 
 def mock_sentiment_analysis(text):
@@ -163,21 +203,32 @@ def add_message(role, content, sentiment=None):
 
 
 def display_messages():
-    """Display all chat messages"""
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            st.markdown(f"""
-                <div class="chat-message user-message">
-                    <strong>You:</strong> {message["content"]}
-                    {f'<div class="sentiment-{message["sentiment"].lower()}">{message["sentiment"]} Sentiment</div>' if message["sentiment"] else ""}
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="chat-message bot-message">
-                    <strong>🤖 Assistant:</strong> {message["content"]}
-                </div>
-            """, unsafe_allow_html=True)
+    """Display all chat messages in a scrollable container"""
+    with st.container():
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+        for i, message in enumerate(st.session_state.messages):
+            if message["role"] == "user":
+                sentiment_badge = ""
+                if message["sentiment"]:
+                    sentiment_class = "sentiment-positive" if message[
+                                                                  "sentiment"] == "Positive" else "sentiment-negative"
+                    sentiment_badge = f'<div class="sentiment-badge {sentiment_class}">{message["sentiment"]} Sentiment</div>'
+
+                st.markdown(f"""
+                    <div class="chat-message user-message">
+                        <strong>You:</strong> {message["content"]}
+                        {sentiment_badge}
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                    <div class="chat-message bot-message">
+                        <strong>🤖 Assistant:</strong> {message["content"]}
+                    </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 def process_user_message(user_input):
@@ -193,9 +244,21 @@ def process_user_message(user_input):
 
     # Generate bot response based on sentiment
     if sentiment == "Positive":
-        bot_response = f"Great! I can sense the positive vibes in your message. Your sentiment appears to be uplifting and optimistic! 😊"
+        responses = [
+            "Great! I can sense the positive vibes in your message. Your sentiment appears to be uplifting and optimistic! 😊",
+            "That's wonderful! Your message radiates positivity. Keep that great energy going! ✨",
+            "I love the positive sentiment in your message! It's so refreshing to hear such optimism! 🌟",
+            "Your positive outlook really shines through! Thanks for sharing such uplifting thoughts! 😄"
+        ]
+        bot_response = random.choice(responses)
     else:
-        bot_response = f"I notice some negative sentiment in your message. Would you like to talk about what's bothering you? 🤗"
+        responses = [
+            "I notice some negative sentiment in your message. Would you like to talk about what's bothering you? 🤗",
+            "I can sense some challenging emotions in your words. Remember, it's okay to feel this way. Want to share more? 💙",
+            "Your message seems to carry some heavy feelings. I'm here to listen if you'd like to talk about it. 🫂",
+            "I picked up on some difficult sentiment. Sometimes it helps to talk through these feelings. What's on your mind? 💜"
+        ]
+        bot_response = random.choice(responses)
 
     # Add bot response
     add_message("assistant", bot_response)
@@ -204,137 +267,111 @@ def process_user_message(user_input):
 # Main app layout
 st.markdown("""
 <div class="main-header">
-    <h1>💬 Sentiment Analysis Chatbot</h1>
-    <p>Share your thoughts and discover their sentiment through text or voice</p>
+    <h2>💬 Sentiment Analysis Chatbot</h2>
+    <p>Share your thoughts and discover their sentiment</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Create two columns for input methods
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("💬 Text Input")
-    # Text input
-    user_input = st.text_area(
-        "Type your message here:",
-        height=100,
-        placeholder="Share your thoughts, feelings, or any message you'd like me to analyze..."
-    )
-
-    if st.button("Send Message", type="primary", use_container_width=True):
-        if user_input:
-            process_user_message(user_input)
-            st.rerun()
-
-with col2:
-    st.subheader("🎤 Voice Input")
-    # Audio file uploader
-    audio_file = st.file_uploader(
-        "Upload audio file:",
-        type=['wav', 'mp3', 'm4a', 'ogg'],
-        help="Upload an audio file to convert speech to text"
-    )
-
-    if audio_file is not None:
-        st.audio(audio_file)
-
-        if st.button("Process Audio", type="secondary", use_container_width=True):
-            with st.spinner("Processing audio..."):
-                text, error = process_audio_file(audio_file)
-
-                if text:
-                    st.success(f"Recognized text: '{text}'")
-                    process_user_message(text)
-                    st.rerun()
-                else:
-                    st.error(error)
-
-# Add some spacing
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Audio recording instructions
-with st.expander("🎙️ How to Record Audio"):
-    st.write("""
-    **For voice input, you have several options:**
-
-    1. **Mobile devices**: Use your phone's voice recorder app, then upload the file
-    2. **Desktop**: Use apps like:
-        - Windows: Voice Recorder app
-        - macOS: QuickTime Player or Voice Memos
-        - Online: recordmp3.org or vocaroo.com
-
-    **Supported formats**: WAV, MP3, M4A, OGG
-
-    **Tips for better recognition**:
-    - Speak clearly and at moderate pace
-    - Minimize background noise
-    - Keep recordings under 1 minute for faster processing
-    """)
-
 # Display chat messages
-st.markdown("---")
-st.subheader("💭 Chat History")
+display_messages()
 
-# Container for scrollable chat
-chat_container = st.container()
-with chat_container:
-    display_messages()
+# Input section at the bottom
+st.markdown('<div class="input-container">', unsafe_allow_html=True)
 
-# Clear chat button
-if st.button("🗑️ Clear Chat History", type="secondary"):
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "Hello! I'm your sentiment analysis assistant. Type a message or upload voice recording to get started. I'll analyze whether your sentiment is positive or negative! 😊",
-            "timestamp": datetime.now(),
-            "sentiment": None
-        }
-    ]
+# Create columns for text input and buttons
+input_col, button_col = st.columns([4, 1])
+
+with input_col:
+    user_input = st.text_area(
+        "",
+        height=80,
+        placeholder="Type your message here and press Ctrl+Enter or click Send...",
+        label_visibility="collapsed",
+        key="user_input"
+    )
+
+with button_col:
+    st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+    send_button = st.button("Send", type="primary", use_container_width=True)
+
+    # Audio upload option
+    audio_file = st.file_uploader(
+        "",
+        type=['wav', 'mp3', 'm4a', 'ogg'],
+        help="Upload audio file",
+        label_visibility="collapsed"
+    )
+
+# Process input
+if send_button and user_input:
+    process_user_message(user_input)
+    # Clear the input by using session state
+    st.session_state.user_input = ""
     st.rerun()
 
-# Sidebar with information
+# Process audio
+if audio_file is not None:
+    st.audio(audio_file, format='audio/wav')
+
+    if st.button("🎤 Process Audio"):
+        with st.spinner("Processing audio..."):
+            text, error = process_audio_file(audio_file)
+
+            if text:
+                st.success(f"Recognized: '{text}'")
+                process_user_message(text)
+                time.sleep(1)  # Brief pause to show success message
+                st.rerun()
+            else:
+                st.error(error)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Sidebar with minimal info
 with st.sidebar:
     st.header("ℹ️ About")
     st.write("""
-    This chatbot analyzes the sentiment of your messages and categorizes them as either **Positive** or **Negative**.
+    This chatbot analyzes the sentiment of your messages as **Positive** or **Negative**.
 
     **Features:**
-    - 💬 Text input analysis
-    - 🎤 Voice-to-text conversion
-    - 📊 Real-time sentiment analysis
-    - 💾 Chat history
-
-    **Current Status:** Demo Mode
-    (Using mock sentiment analysis)
+    - 💬 Real-time sentiment analysis
+    - 🎤 Voice message support
+    - 📱 Mobile-friendly interface
     """)
 
-    st.header("📈 Session Stats")
-    if len(st.session_state.messages) > 1:  # Exclude initial message
-        user_messages = [msg for msg in st.session_state.messages if msg["role"] == "user"]
-        if user_messages:
-            positive_count = sum(1 for msg in user_messages if msg.get("sentiment") == "Positive")
-            negative_count = sum(1 for msg in user_messages if msg.get("sentiment") == "Negative")
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "Hello! I'm your sentiment analysis assistant. Type a message below and I'll analyze whether your sentiment is positive or negative! 😊",
+                "timestamp": datetime.now(),
+                "sentiment": None
+            }
+        ]
+        st.rerun()
 
-            st.metric("Messages Sent", len(user_messages))
-            st.metric("Positive Sentiment", positive_count)
-            st.metric("Negative Sentiment", negative_count)
-
-    st.header("🛠️ Setup Instructions")
-    with st.expander("Installation"):
-        st.code("""
-pip install streamlit
-pip install speechrecognition
-pip install pydub
-pip install pyaudio  # For microphone input
-        """)
-
-    with st.expander("Run Application"):
-        st.code("streamlit run app.py")
-
-# Footer
-st.markdown("---")
+# Add JavaScript for better UX
 st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    Built with ❤️ using Streamlit | Ready for ML model integration
-</div>
+<script>
+// Auto-scroll to bottom of chat
+function scrollToBottom() {
+    const chatContainer = document.querySelector('.chat-container');
+    if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
+
+// Call scroll function after page load
+setTimeout(scrollToBottom, 100);
+
+// Handle Enter key in textarea
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'Enter') {
+        const sendButton = document.querySelector('button[kind="primary"]');
+        if (sendButton) {
+            sendButton.click();
+        }
+    }
+});
+</script>
 """, unsafe_allow_html=True)
