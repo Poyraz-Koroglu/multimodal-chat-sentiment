@@ -13,10 +13,10 @@ class SpeechTextDataset(Dataset):
                  excel_path: str,
                  sample_rate: int = 16000,
                  transform: Optional[Callable] = None,
-                 target_seconds: float = 4.0,
+                 target_seconds: float = 8.0,
                  tokenizer_name: str = "bert-base-uncased",
                  max_length: int = 128,
-                 audio_padding_strategy: str = "zero",  # "zero", "repeat", or "random_crop"
+
                  validate_files: bool = True):
         """
         Args:
@@ -34,8 +34,6 @@ class SpeechTextDataset(Dataset):
         self.target_seconds = target_seconds
         self.target_samples = int(sample_rate * target_seconds)
         self.max_length = max_length
-        self.audio_padding_strategy = audio_padding_strategy
-
         # Load tokenizer
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
@@ -159,41 +157,49 @@ class SpeechTextDataset(Dataset):
         if len(problematic) > 0:
             logging.warning(f"Found {len(problematic)} files with duration issues")
 
-    def _normalize_audio_length(self, audio_tensor: torch.Tensor) -> torch.Tensor:
-        """Normalize audio to target length."""
-        n_samples = audio_tensor.shape[1]
+    import torch
 
-        if n_samples == self.target_samples:
-            return audio_tensor
-        elif n_samples < self.target_samples:
-            # Audio is too short - pad it
+    def normalize_audio_length_dynamic(audio: torch.Tensor, sample_rate: int, target_seconds: float = 7.0,
+                                       short_threshold: float = 2.0):
 
-            padding_needed = self.target_samples - n_samples
+        target_samples = int(target_seconds * sample_rate)
+        n_samples = audio.shape[-1]
+        audio_seconds = n_samples / sample_rate
 
-            if self.audio_padding_strategy == "zero":
-                # Zero padding
-                padding = torch.zeros(1, padding_needed)
-                return torch.cat([audio_tensor, padding], dim=1)
+        if audio_seconds <= short_threshold:
+            # Repeat until half target, then pad with zeros
+            half_target_samples = target_samples // 2
+            repeats = half_target_samples // n_samples
+            remainder = half_target_samples % n_samples
 
-            elif self.audio_padding_strategy == "repeat":
-                # Repeat audio to fill target length
-                repeats_needed = (self.target_samples + n_samples - 1) // n_samples
-                repeated = audio_tensor.repeat(1, repeats_needed)
-                return repeated[:, :self.target_samples]
+            audio_repeated = audio.repeat(1, repeats)
+            if remainder > 0:
+                audio_repeated = torch.cat([audio_repeated, audio[:, :remainder]], dim=1)
 
-            else:
-                raise ValueError(f"Unknown padding strategy: {self.audio_padding_strategy}")
+            remaining_samples = target_samples - audio_repeated.shape[-1]
+            zero_padding = torch.zeros(audio.shape[0], remaining_samples)
+            audio_normalized = torch.cat([audio_repeated, zero_padding], dim=1)
 
         else:
-            # Audio is too long - crop it
-            if self.audio_padding_strategy == "random_crop":
-                # Random crop
-                start_idx = torch.randint(0, n_samples - self.target_samples + 1, (1,)).item()
-                return audio_tensor[:, start_idx:start_idx + self.target_samples]
+            # Random choice: either pad with zeros or repeat
+            import random
+            if random.random() < 0.5:
+                # Zero-pad
+                pad_samples = target_samples - n_samples
+                if pad_samples > 0:
+                    zero_padding = torch.zeros(audio.shape[0], pad_samples)
+                    audio_normalized = torch.cat([audio, zero_padding], dim=1)
+                else:
+                    audio_normalized = audio[:, :target_samples]
             else:
-                # Center crop (default)
-                start_idx = (n_samples - self.target_samples) // 2
-                return audio_tensor[:, start_idx:start_idx + self.target_samples]
+                # Repeat
+                repeats = target_samples // n_samples
+                remainder = target_samples % n_samples
+                audio_normalized = audio.repeat(1, repeats)
+                if remainder > 0:
+                    audio_normalized = torch.cat([audio_normalized, audio[:, :remainder]], dim=1)
+
+        return audio_normalized
 
     def __len__(self) -> int:
         return len(self.df)
