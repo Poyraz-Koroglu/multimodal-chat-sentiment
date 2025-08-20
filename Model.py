@@ -6,12 +6,14 @@ from transformers import (
     DistilBertTokenizer,
     WhisperFeatureExtractor,
 )
+from datasets import load_dataset
+import torchaudio
 import logging
 
 
-class WhisBERTModel(nn.Module):
+class SpeechTextModel(nn.Module):
     """
-    WhisBERT: Multimodal Speech-Text Model
+    SpeechText: Multimodal Speech-Text Model
     Combines Whisper (audio) and DistilBERT (text) embeddings for classification tasks.
     """
 
@@ -124,5 +126,55 @@ class WhisBERTModel(nn.Module):
                 not p.requires_grad for p in self.distilbert.parameters()
             ),
         }
+        #############
+        ##UNIT TEST##
+        ####AUDIO####
+        #############
+
+    """
+ds = load_dataset(
+    "hf-internal-testing/librispeech_asr_dummy",
+    "clean",
+    split="validation"
+)
 
 
+# Get file path directly
+file_path = ds[0]["file"]
+waveform, sr = torchaudio.load(file_path)
+print("Waveform shape:", waveform.shape, "Sample rate:", sr)
+
+# Batchify
+audio_tensor = waveform.sgueeze(0).unsqueeze(0)
+
+
+model = SpeechTextModel()
+
+with torch.no_grad():
+    audio_features = model._extract_audio_features(audio_tensor)
+print("Extracted Whisper features:", audio_features.shape)
+"""
+
+####UNIT TEST####
+#####TEXT########
+
+input = "I am so angry!"
+
+model = SpeechTextModel()
+tokenizer = model.tokenizer
+
+encoding = tokenizer(
+    input,
+    return_tensors="pt",   # returns PyTorch tensors
+    truncation=True,
+    padding="max_length",
+    max_length=32          # or whatever length you want
+)
+
+input_ids = encoding["input_ids"]
+attention_mask = encoding["attention_mask"]
+
+
+with torch.no_grad():
+    text_features = model._extract_text_features(input_ids, attention_mask)
+print("Extracted Whisper features:", text_features.shape)
