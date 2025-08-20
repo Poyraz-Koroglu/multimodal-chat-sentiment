@@ -152,7 +152,7 @@ with torch.no_grad():
 print("Extracted Whisper features:", audio_features.shape)
 ####UNIT TEST####
 #####TEXT########
-"""
+
 
 input = "I am so angry!"
 
@@ -174,4 +174,4 @@ attention_mask = encoding["attention_mask"]
 with torch.no_grad():
     text_features = model._extract_text_features(input_ids, attention_mask)
 print("Extracted Whisper features:", text_features.shape)
-"""
+
