@@ -10,7 +10,7 @@ from typing import Optional, Callable, Dict, Any
 
 class SpeechTextDataset(Dataset):
     def __init__(self,
-                 excel_path: str,
+                 excel_path: str="C:/Users/poyraz.koroglu/Desktop/Trial-Dataset-root/metadata.cs",
                  sample_rate: int = 16000,
                  transform: Optional[Callable] = None,
                  target_seconds: float = 8.0,
@@ -26,7 +26,6 @@ class SpeechTextDataset(Dataset):
             target_seconds (float): Target audio length in seconds
             tokenizer_name (str): HuggingFace tokenizer name
             max_length (int): Maximum sequence length for tokenization
-            audio_padding_strategy (str): How to handle audio length normalization
             validate_files (bool): Whether to validate audio files exist during init
         """
         self.sample_rate = sample_rate
@@ -34,6 +33,7 @@ class SpeechTextDataset(Dataset):
         self.target_seconds = target_seconds
         self.target_samples = int(sample_rate * target_seconds)
         self.max_length = max_length
+        self.excel_path = excel_path
         # Load tokenizer
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
@@ -42,7 +42,10 @@ class SpeechTextDataset(Dataset):
 
         # Load dataset
         try:
-            self.df = pd.read_excel(excel_path)
+            if excel_path.endswith(".csv"):
+                self.df = pd.read_excel(excel_path)
+            elif excel_path.endswith(".xlsx") or excel_path.endswith(".xls"):
+                self.df = pd.read_excel(excel_path, engine="openpyxl")
         except Exception as e:
             raise FileNotFoundError(f"Failed to load Excel file '{excel_path}': {e}")
 
@@ -219,7 +222,7 @@ class SpeechTextDataset(Dataset):
 
             # Convert to tensor and normalize length
             audio_tensor = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0)
-            audio_tensor = self._normalize_audio_length(audio_tensor)
+            audio_tensor = self.normalize_audio_length_dynamic(audio_tensor)
 
             # Apply transforms
             if self.transform:
