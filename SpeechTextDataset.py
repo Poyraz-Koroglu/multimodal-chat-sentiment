@@ -167,6 +167,7 @@ class SpeechTextDataset(Dataset):
             return audio_tensor
         elif n_samples < self.target_samples:
             # Audio is too short - pad it
+
             padding_needed = self.target_samples - n_samples
 
             if self.audio_padding_strategy == "zero":

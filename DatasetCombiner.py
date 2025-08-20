@@ -1,18 +1,15 @@
 import os
 import pandas as pd
 
-
-
-ROOT_DATASETS_DIR = "C:/Users/poyraz.koroglu/Desktop/datasets-root"
+ROOT_DATASETS_DIR = "C:/Users/poyraz.koroglu/Desktop/Trial-Dataset-root"
 
 DATASET_LABEL_MAPS = {
-    "dataset1": {"neutral": 0, "negative": 1},
-    "dataset2": {"neutral": 0, "negative": 1},
+    "dataset1": {"negative": 1},
+    "dataset2": {"neutral": 0},
     # Add more mappings if needed
 }
 
 AUDIO_EXTENSIONS = [".wav", ".flac", ".mp3"]
-
 
 all_rows = []
 
@@ -31,12 +28,25 @@ for dataset_name in os.listdir(ROOT_DATASETS_DIR):
 
         label_id = label_map[label_name] if label_map else label_name
 
-        for file in os.listdir(label_folder):
-            if any(file.lower().endswith(ext) for ext in AUDIO_EXTENSIONS):
-                audio_path = os.path.join(label_folder, file)
-                all_rows.append([audio_path, label_id])
+        # Load transcripts if available
+        transcript_path = os.path.join(label_folder, "transcript.txt")
+        transcripts = []
+        if os.path.exists(transcript_path):
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                transcripts = [line.strip() for line in f.readlines()]
 
-df_all = pd.DataFrame(all_rows, columns=["audio", "label"])
+        # List and sort audio files by filename
+        audio_files = sorted(
+            [f for f in os.listdir(label_folder) if any(f.lower().endswith(ext) for ext in AUDIO_EXTENSIONS)]
+        )
+
+        for idx, audio_file in enumerate(audio_files):
+            audio_path = os.path.join(label_folder, audio_file)
+            # Match transcript line if exists
+            transcript_text = transcripts[idx] if idx < len(transcripts) else ""
+            all_rows.append([audio_path, label_id, transcript_text])
+
+df_all = pd.DataFrame(all_rows, columns=["audio", "label", "transcript"])
 
 output_file = os.path.join(ROOT_DATASETS_DIR, "metadata.csv")
 df_all.to_csv(output_file, index=False)

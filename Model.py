@@ -131,7 +131,6 @@ class SpeechTextModel(nn.Module):
         ####AUDIO####
         #############
 
-    """
 ds = load_dataset(
     "hf-internal-testing/librispeech_asr_dummy",
     "clean",
@@ -140,23 +139,20 @@ ds = load_dataset(
 
 
 # Get file path directly
-file_path = ds[0]["file"]
-waveform, sr = torchaudio.load(file_path)
-print("Waveform shape:", waveform.shape, "Sample rate:", sr)
+file_path = ds[0]["file"]  # get the path to the audio file
+waveform, sr = torchaudio.load(file_path)  # load audio manually
 
-# Batchify
-audio_tensor = waveform.sgueeze(0).unsqueeze(0)
-
+# Add batch & channel dimensions
+audio_tensor = waveform.unsqueeze(0)  # [B, 1, seq_len]
 
 model = SpeechTextModel()
-
 with torch.no_grad():
     audio_features = model._extract_audio_features(audio_tensor)
-print("Extracted Whisper features:", audio_features.shape)
-"""
 
+print("Extracted Whisper features:", audio_features.shape)
 ####UNIT TEST####
 #####TEXT########
+"""
 
 input = "I am so angry!"
 
@@ -178,3 +174,4 @@ attention_mask = encoding["attention_mask"]
 with torch.no_grad():
     text_features = model._extract_text_features(input_ids, attention_mask)
 print("Extracted Whisper features:", text_features.shape)
+"""
