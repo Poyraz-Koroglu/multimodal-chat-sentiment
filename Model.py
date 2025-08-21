@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from speech_recognition.recognizers.whisper_local import whisper
 from transformers import (
     WhisperModel,
     DistilBertModel,
@@ -120,11 +119,11 @@ class SpeechTextModel(nn.Module):
         audio_features = self._extract_audio_features(audio)
         text_features = self._extract_text_features(input_ids, attention_mask)
 
-        audio_features = self.audio_head(audio_features, text_features)
-        text_features = self.text_head(text_features, audio_features)
+        audio_features = self.audio_head(audio_features)
+        text_features = self.text_head(text_features)
 
         fused = self._fuse_features(audio_features, text_features)
-        logits = self.classifier(fused)
+        logits = self.fusion_head(fused)
 
         return {
             "logits": logits,
