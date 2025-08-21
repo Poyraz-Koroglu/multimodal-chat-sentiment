@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from speech_recognition.recognizers.whisper_local import whisper
 from transformers import (
     WhisperModel,
     DistilBertModel,
@@ -10,6 +11,8 @@ from datasets import load_dataset
 import torchaudio
 import logging
 
+from transformers.models import distilbert
+
 
 class SpeechTextModel(nn.Module):
     """
@@ -19,20 +22,25 @@ class SpeechTextModel(nn.Module):
 
     def __init__(
         self,
+        whisper_dim: int ,
+        distilbert_dim: int ,
         whisper_model_name: str = "openai/whisper-small",
         distilbert_model_name: str = "distilbert-base-uncased",
         freeze_whisper: bool = True,
         freeze_distilbert: bool = True,
         num_classes: int = 2,
         dropout: float = 0.3,
-        hidden_dim: int = 768,
+        hidden_dim: int = 768
+
     ):
         super().__init__()
         self.num_classes = num_classes
         self.dropout = dropout
         self.hidden_dim = hidden_dim
-        self._initiate_heads(hidden_dim)
 
+        self.whisper_dim = whisper_dim
+        self.distilbert_dim = distilbert_dim
+        self._initiate_heads(hidden_dim)
         # Whisper model + feature extractor
         self.whisper = WhisperModel.from_pretrained(whisper_model_name)
         self.audio_processor = WhisperFeatureExtractor.from_pretrained(
@@ -44,6 +52,7 @@ class SpeechTextModel(nn.Module):
                 param.requires_grad = False
 
         self.whisper_dim = self.whisper.config.d_model
+        print(self.whisper_dim)
 
         # DistilBERT model
         self.distilbert = DistilBertModel.from_pretrained(distilbert_model_name)
@@ -54,6 +63,7 @@ class SpeechTextModel(nn.Module):
                 param.requires_grad = False
 
         self.distilbert_dim = self.distilbert.config.hidden_size
+        print(self.distilbert_dim)
 
         self._initiate_heads(hidden_dim)
 
@@ -148,7 +158,7 @@ class SpeechTextModel(nn.Module):
         ##UNIT TEST##
         ####AUDIO####
         #############
-
+"""
 ds = load_dataset(
     "hf-internal-testing/librispeech_asr_dummy",
     "clean",
@@ -192,4 +202,4 @@ attention_mask = encoding["attention_mask"]
 with torch.no_grad():
     text_features = model._extract_text_features(input_ids, attention_mask)
 print("Extracted Whisper features:", text_features.shape)
-
+"""
