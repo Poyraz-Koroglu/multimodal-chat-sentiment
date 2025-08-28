@@ -109,20 +109,36 @@ class SpeechTextModel(nn.Module):
             nn.Dropout(self.dropout),
             nn.Linear(hidden_dim, self.num_classes),
         )
+    def _fuse_heads(self, hidden_dim: int):
+        self.fusion_head = nn.Sequential(
+            nn.Linear(self.hidden_dim*2, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(p=self.dropout),
+        )
 
 
     def _fuse_features(self, audio_features, text_features):
         return torch.cat([audio_features, text_features], dim=1)
 
     # Forward pass
-    def forward(self, audio, input_ids, attention_mask):
-        audio_features = self._extract_audio_features(audio)
-        text_features = self._extract_text_features(input_ids, attention_mask)
+    def forward(self, audio=None, input_ids=None, attention_mask=None):
+        audio_features = self._extract_audio_features(audio) if audio is not None else None
+        text_features = self._extract_text_features(input_ids, attention_mask) if input_ids is not None else None
 
-        audio_features = self.audio_head(audio_features)
-        text_features = self.text_head(text_features)
+        if audio_features is not None:
+            audio_features = self.audio_head(audio_features)
+        if text_features is not None:
+            text_features = self.text_head(text_features)
 
-        fused = self._fuse_features(audio_features, text_features)
+        if audio_features is not None and text_features is not None:
+            fused = self._fuse_features(audio_features, text_features)
+        elif audio_features is not None:
+            fused = audio_features
+        elif text_features is not None:
+            fused = text_features
+        else:
+            raise ValueError("Both audio and text are None!")
+
         logits = self.fusion_head(fused)
 
         return {
