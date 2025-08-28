@@ -1,22 +1,33 @@
-import torch
-from torch.utils.data import Dataset
-import librosa
-import pandas as pd
-from transformers import AutoTokenizer
 import os
 import logging
 from typing import Optional, Callable, Dict, Any
 
+# Import torch first and check for issues
+try:
+    import torch
+    from torch.utils.data import Dataset
+except ImportError as e:
+    raise ImportError(f"Failed to import torch: {e}")
+
+# Import other libraries
+import librosa
+import pandas as pd
+
+# Import transformers separately with error handling
+try:
+    from transformers import AutoTokenizer
+except ImportError as e:
+    raise ImportError(f"Failed to import transformers: {e}. Please install with: pip install transformers")
+
 
 class SpeechTextDataset(Dataset):
     def __init__(self,
-                 excel_path: str="C:/Users/poyraz.koroglu/Desktop/Trial-Dataset-root/metadata.cs",
+                 excel_path: str,
                  sample_rate: int = 16000,
                  transform: Optional[Callable] = None,
                  target_seconds: float = 8.0,
                  tokenizer_name: str = "bert-base-uncased",
                  max_length: int = 128,
-
                  validate_files: bool = True):
         """
         Args:
@@ -34,6 +45,7 @@ class SpeechTextDataset(Dataset):
         self.target_samples = int(sample_rate * target_seconds)
         self.max_length = max_length
         self.excel_path = excel_path
+
         # Load tokenizer
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
@@ -43,11 +55,17 @@ class SpeechTextDataset(Dataset):
         # Load dataset
         try:
             if excel_path.endswith(".csv"):
-                self.df = pd.read_excel(excel_path)
+                self.df = pd.read_csv(excel_path, encoding="ISO-8859-9")
             elif excel_path.endswith(".xlsx") or excel_path.endswith(".xls"):
                 self.df = pd.read_excel(excel_path, engine="openpyxl")
+            else:
+                # Try to detect automatically
+                if "csv" in excel_path.lower():
+                    self.df = pd.read_csv(excel_path, encoding="ISO-8859-9")
+                else:
+                    self.df = pd.read_excel(excel_path, engine="openpyxl")
         except Exception as e:
-            raise FileNotFoundError(f"Failed to load Excel file '{excel_path}': {e}")
+            raise FileNotFoundError(f"Failed to load file '{excel_path}': {e}")
 
         # Validate required columns
         required_columns = ["Audio", "Label", "Transcript"]
@@ -136,7 +154,7 @@ class SpeechTextDataset(Dataset):
 
         def get_duration_safe(path):
             try:
-                return librosa.get_duration(filename=path)
+                return librosa.get_duration(path=path)
             except Exception as e:
                 logging.warning(f"Failed to get duration for {path}: {e}")
                 return float('inf')  # Put problematic files at the end
@@ -160,10 +178,38 @@ class SpeechTextDataset(Dataset):
         if len(problematic) > 0:
             logging.warning(f"Found {len(problematic)} files with duration issues")
 
-    import torch
+    def normalize_audio_length_dynamic(
+            self,
+            audio: torch.Tensor,
+            sample_rate: int = 16000,
+            target_seconds: float = 7.0,
+            short_threshold: float = 2.0
+    ) -> torch.Tensor:
+        """
+        Normalize the length of an audio tensor to a target duration.
+        Short audios are repeated and zero-padded; longer audios are either padded or repeated randomly.
 
-    def normalize_audio_length_dynamic(audio: torch.Tensor, sample_rate: int, target_seconds: float = 7.0,
-                                       short_threshold: float = 2.0):
+        Args:
+            audio (torch.Tensor): Audio tensor of shape (1, n_samples) or (channels, n_samples)
+            sample_rate (int): Audio sample rate (e.g., 16000)
+            target_seconds (float): Desired target length in seconds
+            short_threshold (float): Threshold below which audio is considered very short
+
+        Returns:
+            torch.Tensor: Audio tensor normalized to target length
+        """
+        # Import random here to avoid potential circular import issues
+        import random
+
+        # Convert sample_rate to scalar if it's a tensor
+        if isinstance(sample_rate, torch.Tensor):
+            sample_rate = sample_rate.item()
+
+        # Convert other parameters to scalars if they're tensors
+        if isinstance(target_seconds, torch.Tensor):
+            target_seconds = target_seconds.item()
+        if isinstance(short_threshold, torch.Tensor):
+            short_threshold = short_threshold.item()
 
         target_samples = int(target_seconds * sample_rate)
         n_samples = audio.shape[-1]
@@ -180,17 +226,16 @@ class SpeechTextDataset(Dataset):
                 audio_repeated = torch.cat([audio_repeated, audio[:, :remainder]], dim=1)
 
             remaining_samples = target_samples - audio_repeated.shape[-1]
-            zero_padding = torch.zeros(audio.shape[0], remaining_samples)
+            zero_padding = torch.zeros(audio.shape[0], remaining_samples, dtype=audio.dtype, device=audio.device)
             audio_normalized = torch.cat([audio_repeated, zero_padding], dim=1)
 
         else:
             # Random choice: either pad with zeros or repeat
-            import random
             if random.random() < 0.5:
-                # Zero-pad
+                # Zero-pad or truncate
                 pad_samples = target_samples - n_samples
                 if pad_samples > 0:
-                    zero_padding = torch.zeros(audio.shape[0], pad_samples)
+                    zero_padding = torch.zeros(audio.shape[0], pad_samples, dtype=audio.dtype, device=audio.device)
                     audio_normalized = torch.cat([audio, zero_padding], dim=1)
                 else:
                     audio_normalized = audio[:, :target_samples]
@@ -222,7 +267,7 @@ class SpeechTextDataset(Dataset):
 
             # Convert to tensor and normalize length
             audio_tensor = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0)
-            audio_tensor = self.normalize_audio_length_dynamic(audio_tensor)
+            audio_tensor = self.normalize_audio_length_dynamic(audio_tensor, sample_rate=16000)
 
             # Apply transforms
             if self.transform:
@@ -255,7 +300,7 @@ class SpeechTextDataset(Dataset):
 
             return {
                 "audio": audio_tensor,
-                "label": torch.tensor(label_id, dtype=torch.long),
+                "labels": torch.tensor(label_id, dtype=torch.long),
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
                 "transcript": transcript,
