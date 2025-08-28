@@ -3,23 +3,24 @@ from typing import Dict
 
 import torch
 from sklearn.metrics import accuracy_score, f1_score, classification_report
-from sympy.physics.control.control_plots import plt
+import matplotlib.pyplot as plt
 from torch import nn
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 def train_model(
         self,
         train_dataloader: DataLoader,
         num_epochs: int,
-        val_dataloader: DataLoader = None,
+        val_dataloader: DataLoader ,
         learning_rate: float = 1e-4,
         weight_decay: float = 1e-5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         save_path: str = None,
         patience: int = 5,
+        scheduler_patience: int =2,
         min_delta: float = 1e-4
 ) :
     """
@@ -43,7 +44,7 @@ def train_model(
     self.to(device)
 
     # Initialize optimizer and loss function
-    optimizer = optim.AdamW(
+    optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, self.parameters()),
         lr=learning_rate,
         weight_decay=weight_decay
@@ -51,7 +52,7 @@ def train_model(
 
     criterion = nn.CrossEntropyLoss()
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', patience=patience // 2, factor=0.5
+        optimizer, mode='min', patience=scheduler_patience // 2, factor=0.5
     )
 
     # Training history
@@ -161,10 +162,6 @@ def train_model(
                 best_val_loss = avg_val_loss
                 epochs_without_improvement = 0
 
-                # Save best model
-                if save_path:
-                    self.save_model(save_path)
-                    logging.info(f"New best model saved with val_loss: {avg_val_loss:.4f}")
             else:
                 epochs_without_improvement += 1
 
@@ -186,6 +183,12 @@ def train_model(
             )
 
     logging.info("Training completed!")
+
+    # Save model at the end of training
+    if save_path:
+        self.save_model(save_path)
+        logging.info(f"Model saved at {save_path} after training session")
+
     return history
 
 
@@ -287,6 +290,7 @@ def plot_training_history(self, history: Dict, save_path: str = None):
     ax4_twin.plot(epochs, history['train_acc'], 'r-', label='Train Acc')
     if 'val_loss' in history and history['val_loss']:
         ax4.plot(epochs, history['val_loss'], 'b--', label='Val Loss')
+    if 'val_acc' in history and history['val_acc']:
         ax4_twin.plot(epochs, history['val_acc'], 'r--', label='Val Acc')
 
     ax4.set_xlabel('Epoch')
@@ -306,31 +310,26 @@ def plot_training_history(self, history: Dict, save_path: str = None):
         logging.info(f"Training history plot saved to {save_path}")
 
     plt.show()
+    """
+def plot_test_history(self, history: Dict, save_path: str = None):
+    fig, ax5 = plt.subplots(figsize=(15, 10))
 
+    # test plot
+    epochs = range(1, len(history['test_accuracy']) + 1)
+    ax5.plot(epochs, history['test_accuracy'], 'b-', label='Test accuracy')
+    if 'test_acc' in history and history['test_acc']:
+        ax5.plot(epochs, history['test_acc'], 'b-', label='Test Accuracy')
+    ax5.set_title('Test accuracy')
+    ax5.set_xlabel('Epoch')
+    ax5.set_ylabel('accuracy')
+    ax5.legend()
+    ax5.grid(True)
 
-def save_model(self, path: str):
-    """Save model state dict"""
-    torch.save(self.state_dict(), path)
-    logging.info(f"Model saved to {path}")
+    plt.tight_layout()
 
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        logging.info(f"Test history plot saved to {save_path}")
 
-def load_model(self, path: str, map_location=None):
-    """Load model state dict"""
-    self.load_state_dict(torch.load(path, map_location=map_location))
-    logging.info(f"Model loaded from {path}")
-
-
-def get_model_info(self):
-    """Get model information"""
-    return {
-        "whisper_dim": self.whisper_dim,
-        "distilbert_dim": self.distilbert_dim,
-        "num_classes": self.num_classes,
-        "dropout": self.dropout,
-        "hidden_dim": self.hidden_dim,
-        "total_params": sum(p.numel() for p in self.parameters()),
-        "trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
-        "frozen_whisper": all(not p.requires_grad for p in self.whisper.parameters()),
-        "frozen_distilbert": all(not p.requires_grad for p in self.distilbert.parameters()),
-    }
-
+    plt.show()
+"""
