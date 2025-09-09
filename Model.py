@@ -6,11 +6,9 @@ from transformers import (
     DistilBertTokenizer,
     WhisperFeatureExtractor,
 )
-from datasets import load_dataset
-import torchaudio
+
 import logging
 
-from transformers.models import distilbert
 
 
 class SpeechTextModel(nn.Module):
@@ -106,15 +104,12 @@ class SpeechTextModel(nn.Module):
         self.fusion_head = nn.Sequential(
             nn.Linear(self.hidden_dim * 2, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(hidden_dim, self.num_classes),
-        )
-    def _fuse_heads(self, hidden_dim: int):
-        self.fusion_head = nn.Sequential(
-            nn.Linear(self.hidden_dim*2, hidden_dim),
-            nn.ReLU(),
             nn.Dropout(p=self.dropout),
+            nn.Linear(hidden_dim, self.num_classes)
         )
+
+
+
 
 
     def _fuse_features(self, audio_features, text_features):
@@ -140,7 +135,6 @@ class SpeechTextModel(nn.Module):
             raise ValueError("Both audio and text are None!")
 
         logits = self.fusion_head(fused)
-
         return {
             "logits": logits,
             "audio_features": audio_features,

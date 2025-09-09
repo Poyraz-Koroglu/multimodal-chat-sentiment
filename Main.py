@@ -1,8 +1,6 @@
 import os
-import torch
 from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
-from fastapi import FastAPI, File, UploadFile
+
 from Model import SpeechTextModel
 from SpeechTextDataset import SpeechTextDataset
 from Train import train_model, plot_training_history, evaluate

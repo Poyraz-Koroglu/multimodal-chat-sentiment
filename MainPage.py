@@ -139,57 +139,53 @@ if "messages" not in st.session_state:
     ]
 
 
-def mock_sentiment_analysis(text):
+import requests
+
+FASTAPI_URL = "http://127.0.0.1:8000/predict"  # or your server URL
+
+def get_sentiment_from_api(text=None, audio_file=None):
     """
-    Mock sentiment analysis function - replace this with your actual model
+    Call FastAPI backend for sentiment analysis.
     """
-    positive_words = ['good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic',
-                      'happy', 'joy', 'love', 'like', 'awesome', 'perfect', 'brilliant', 'outstanding']
-    negative_words = ['bad', 'terrible', 'awful', 'horrible', 'sad', 'angry', 'hate',
-                      'dislike', 'frustrated', 'disappointed', 'worried', 'stressed', 'upset', 'annoyed']
+    try:
+        files = {}
+        data = {}
 
-    words = text.lower().split()
-    positive_score = sum(1 for word in words if any(pos in word for pos in positive_words))
-    negative_score = sum(1 for word in words if any(neg in word for neg in negative_words))
+        if text:
+            data["text"] = text
 
-    # Add some randomness for demo purposes
-    random_factor = random.choice([1, -1]) if positive_score == negative_score else 0
+        if audio_file:
+            files["audio"] = (audio_file.name, audio_file, audio_file.type)
 
-    if positive_score > negative_score or (positive_score == negative_score and random_factor > 0):
-        return "Positive"
-    else:
-        return "Negative"
+        response = requests.post(FASTAPI_URL, data=data, files=files)
+        response.raise_for_status()
+        result = response.json()
+
+        # API returns { "prediction": 0 or 1 }
+        return "Negative" if result["prediction"] == 1 else "Positive"
+
+    except Exception as e:
+        return f"API error: {e}"
 
 
 def process_audio_file(audio_file):
     """
-    Process uploaded audio file and convert to text using speech recognition
+    Send uploaded audio file to FastAPI backend for sentiment analysis.
     """
     try:
-        # Create a temporary file to save the uploaded audio
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_file.write(audio_file.getvalue())
-            temp_path = temp_file.name
+        files = {"audio": (audio_file.name, audio_file, audio_file.type)}
+        response = requests.post(FASTAPI_URL, files=files)
+        response.raise_for_status()
 
-        # Initialize recognizer
-        recognizer = sr.Recognizer()
+        result = response.json()
+        sentiment = "Negative" if result["prediction"] == 1 else "Positive"
+        return sentiment, None
 
-        # Convert audio to text
-        with sr.AudioFile(temp_path) as source:
-            audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data)
-
-        # Clean up temporary file
-        os.unlink(temp_path)
-
-        return text, None
-
-    except sr.UnknownValueError:
-        return None, "Could not understand the audio. Please try again with clearer speech."
-    except sr.RequestError as e:
-        return None, f"Error with speech recognition service: {e}"
+    except requests.exceptions.RequestException as e:
+        return None, f"API request error: {e}"
     except Exception as e:
         return None, f"Error processing audio: {e}"
+
 
 
 def add_message(role, content, sentiment=None):
@@ -236,8 +232,8 @@ def process_user_message(user_input):
     if not user_input.strip():
         return
 
-    # Analyze sentiment
-    sentiment = mock_sentiment_analysis(user_input)
+    # Call backend instead of mock
+    sentiment = get_sentiment_from_api(text=user_input)
 
     # Add user message
     add_message("user", user_input, sentiment)
@@ -245,22 +241,16 @@ def process_user_message(user_input):
     # Generate bot response based on sentiment
     if sentiment == "Positive":
         responses = [
-            "Great! I can sense the positive vibes in your message. Your sentiment appears to be uplifting and optimistic! 😊",
-            "That's wonderful! Your message radiates positivity. Keep that great energy going! ✨",
-            "I love the positive sentiment in your message! It's so refreshing to hear such optimism! 🌟",
-            "Your positive outlook really shines through! Thanks for sharing such uplifting thoughts! 😄"
+            "Great! I can sense the positive vibes in your message. 😊",
+            "That's wonderful! Keep that great energy going! ✨",
         ]
-        bot_response = random.choice(responses)
     else:
         responses = [
-            "I notice some negative sentiment in your message. Would you like to talk about what's bothering you? 🤗",
-            "I can sense some challenging emotions in your words. Remember, it's okay to feel this way. Want to share more? 💙",
-            "Your message seems to carry some heavy feelings. I'm here to listen if you'd like to talk about it. 🫂",
-            "I picked up on some difficult sentiment. Sometimes it helps to talk through these feelings. What's on your mind? 💜"
+            "I notice some negative sentiment in your message. 🤗",
+            "It seems you’re going through something challenging. 💙",
         ]
-        bot_response = random.choice(responses)
 
-    # Add bot response
+    bot_response = random.choice(responses)
     add_message("assistant", bot_response)
 
 

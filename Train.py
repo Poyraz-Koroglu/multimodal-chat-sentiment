@@ -8,7 +8,6 @@ from torch import nn
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 def train_model(
         self,
