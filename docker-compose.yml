@@ -1,0 +1,83 @@
+version: "3.7"
+
+services:
+  # --- Backend ---
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: DockerFile
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models       # pretrained model
+      - ./data:/app/data           # any CSVs/datasets needed for preprocessing
+    depends_on:
+      - elasticsearch
+    environment:
+      - MODEL_PATH=/app/models/fastapi_trial_model.pth
+
+  # --- Frontend ---
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: DockerFile
+    container_name: frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+
+  # --- Elasticsearch ---
+
+  elasticsearch:
+      image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
+      environment:
+        - discovery.type=single-node
+        - ES_JAVA_OPTS=-Xms1g -Xmx1g
+        - ELASTIC_PASSWORD=changeme
+        - xpack.security.enabled=false   # disable security for simplicity; adjust as needed
+      ports:
+        - "9200:9200"
+        - "9300:9300"
+      volumes:
+        - esdata:/usr/share/elasticsearch/data
+      networks:
+        - elastic-net
+
+  kibana:
+      image: docker.elastic.co/kibana/kibana:9.0.0
+      environment:
+        - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+        - ELASTICSEARCH_USERNAME=elasticuser
+        - ELASTICSEARCH_PASSWORD=changeme
+        - SERVER_HOST=0.0.0.0           # listen on all interfaces
+      ports:
+        - "5601:5601"
+      depends_on:
+        - elasticsearch
+      networks:
+        - elastic-net
+
+  apm-server:
+      image: docker.elastic.co/apm/apm-server:9.0.0
+      environment:
+        - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+        - KIBANA_HOST=http://kibana:5601
+        - output.elasticsearch.username=elasticuser
+        - output.elasticsearch.password=changeme
+        - apm-server.secret_token=changemeapmtoken
+      ports:
+        - "8200:8200"
+      depends_on:
+        - elasticsearch
+        - kibana
+      networks:
+        - elastic-net
+
+volumes:
+  esdata:
+
+networks:
+  elastic-net:
+    driver: bridge
